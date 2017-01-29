@@ -31,12 +31,15 @@
 ShiftRegisterSIPO sro(&PORTB, &DDRB, PINB1, PINB0, PINB2);
 
 // _ds, _pl, _cp, _ce
-ShiftRegisterPISO sri(&PORTC, &DDRC, PINC5, PINC3, PINC4, PINC2);
+ShiftRegisterPISO sri(&PORTC, &DDRC, PINC5, PINC3, PINC4, PINC2, PINC1);
+
+#define GBWR PINB3
+#define GBRD PINB4
 
 /*
  * read_memory
  *
- * Read memory from cartridge. Results are communicated over SerialPort 
+ * Read memory from cartridge. Results are communicated over SerialPort
  * as HEX characters (2 char per byte)
  *
  * @param addr - Starting address
@@ -53,26 +56,51 @@ void read_memory(uint16_t addr, uint16_t len) {
 
     uint16_t pos  = addr;
     while(pos < (uint16_t)addr + len) {
-        sro.output_16bit(pos);
-        uint8_t input = sri.input_8bit();
+        sro.write_16bit(pos);
+        uint8_t input = sri.read_8bit();
         sprintf(buf, "%02X", input);
         SerialPort::get()->serial_send_line(buf, 2);
         pos++;
     }
 
     // reset shift registers to 0
-    sro.output_16bit(0);
+    sro.write_16bit(0);
 }
 
 /*
- * char2hex
+ * change_mbr
+ *
+ * routine to select memory bank
+ */
+void change_mbr(uint8_t bank_addr) {
+    // set write low
+    PORTB &= ~(1 << GBWR);    // low
+    PORTB |= (1 << GBRD);     // high
+
+    // write address
+    sro.write_16bit(0x2100);
+    _delay_ms(5);
+
+    // write bank
+    sri.write_8bit(bank_addr);
+    _delay_ms(5);
+
+    // set write high and read low to
+    // disable write and enable read
+    PORTB |= (1 << GBWR);     // high
+    PORTB &= ~(1 << GBRD);    // low
+    _delay_ms(5);
+}
+
+/*
+ * char2hex4
  *
  * Helper function that converts 4 char hex addr to 16 bit unsigned int
  *
  * @param c - Pointer to c-string
  *
  */
-uint16_t char2hex(char* c) {
+uint16_t char2hex4(char* c) {
     char hv[5] = {'\0', '\0', '\0', '\0', '\0'};
 
     for(int i=0; i<4; i++) {
@@ -84,9 +112,28 @@ uint16_t char2hex(char* c) {
 }
 
 /*
+ * char2hex2
+ *
+ * Helper function that converts 2 char hex addr to 8 bit unsigned int
+ *
+ * @param c - Pointer to c-string
+ *
+ */
+uint8_t char2hex2(char* c) {
+    char hv[3] = {'\0', '\0', '\0'};
+
+    for(int i=0; i<2; i++) {
+        hv[i] = *c;
+        c++;
+    }
+
+    return strtoul(hv, NULL, 16);
+}
+
+/*
  * get_command
  *
- * Get input command over serial; 
+ * Get input command over serial;
  *
  * Extend this function to accept more commands
  *
@@ -103,10 +150,36 @@ void get_command() {
         }
     }
 
-    uint16_t addr = char2hex(&cmd[4]);
-    uint16_t len  = char2hex(&cmd[8]);
+    // command list
+    //
+    // READ XXXX XXXX --> read instruction
+    // CHAN GEBA NKXX --> change bank position
 
-    read_memory(addr, len);
+    if(strncmp(cmd, "READ", 4) == 0) {
+        uint16_t addr = char2hex4(&cmd[4]);
+        uint16_t len  = char2hex4(&cmd[8]);
+        read_memory(addr, len);
+    } else if(strncmp(cmd, "CHNGBANK", 8) == 0) {
+        uint8_t bank_addr = char2hex2(&cmd[10]);
+        change_mbr(bank_addr);
+    }
+}
+
+/*
+ * setup
+ *
+ * run this function at the start of the main routine
+ *
+ */
+void setup() {
+    // set pins for WR and RD on GB
+    DDRB |= (1 << GBWR);  // output
+    DDRB |= (1 << GBRD);  // output
+
+    // set write high and read low to
+    // disable write and enable read
+    PORTB |= (1 << GBWR);     // high
+    PORTB &= ~(1 << GBRD);    // low
 }
 
 /*
@@ -116,10 +189,14 @@ void get_command() {
  *
  */
 int main(void) {
+    // setup GB pins
+    setup();
+
+    // setup serial connection
     SerialPort::get();
 
     // set address to 0
-    sro.output_16bit(0);
+    sro.write_16bit(0);
 
     while(1) {
         get_command();

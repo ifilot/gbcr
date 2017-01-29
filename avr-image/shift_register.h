@@ -36,8 +36,8 @@ private:
 
 public:
     ShiftRegisterSIPO(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _ser, uint8_t _clk, uint8_t _rck);
-    void output_8bit(uint8_t state);
-    void output_16bit(uint16_t state);
+    void write_8bit(uint8_t state);
+    void write_16bit(uint16_t state);
 };
 
 /*
@@ -52,10 +52,12 @@ private:
     uint8_t pl;                // parallel load (active low)
     uint8_t cp;                // clock pulse
     uint8_t ce;                // clock enable (active low)
+    uint8_t se;                // serial in
 
 public:
-    ShiftRegisterPISO(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _ds, uint8_t _pl, uint8_t _cp, uint8_t _ce);
-    uint8_t input_8bit();
+    ShiftRegisterPISO(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _ds, uint8_t _pl, uint8_t _cp, uint8_t _ce, uint8_t _se);
+    uint8_t read_8bit();
+    void write_8bit(uint8_t state);
 };
 
 #endif

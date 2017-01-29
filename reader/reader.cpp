@@ -50,8 +50,35 @@ static inline void print_loadbar(unsigned int x, unsigned int n, unsigned int w 
     std::cout << "]\r" << std::flush;
 }
 
+int change_rom_bank(uint8_t bank_addr, bool output) {
+    // create buffer
+    char c[12];
+
+    if(output) {
+        std::cout << "Changing to ROM BANK: " << (char)(bank_addr+48) << "  " << std::flush;
+    }
+
+    char cmd[13] = {'C', 'H', 'A', 'N', 'G', 'E', 'B', 'A', 'N', 'K', '0', '0','0'};
+    sprintf(&cmd[10], "%02X", bank_addr);
+    std::cout << cmd << std::endl;
+    for(unsigned int i=0; i<12; i++) {
+        boost::asio::write(port, boost::asio::buffer(&cmd[i], 1));
+        boost::asio::read(port, boost::asio::buffer(&c,1));
+        if(cmd[i] != c[0]) {
+            std::cerr << "An error occurred during data transfer, aborting!" << std::endl;
+            std::cerr << "Error encountered at " << __FILE__ << " (" << __LINE__ << ")" << std::endl;
+            std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << std::endl;
+            exit(-1);
+        }
+    }
+
+    if(output) {
+        std::cout << "Done" << std::endl;
+    }
+}
+
 /*
- * read_cartridge
+ * read_memory
  *
  * @param _addr  - starting address
  * @param _len   - number of bytes to read
@@ -59,7 +86,7 @@ static inline void print_loadbar(unsigned int x, unsigned int n, unsigned int w 
  *
  * return number of bytes read
  */
-size_t read_cartridge(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffer, bool show_progress = false) {
+size_t read_memory(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffer, bool show_progress = false) {
     // create buffer
     char c[12];
 
@@ -192,25 +219,42 @@ int main(int argc, char** argv) {
     // test simple read instruction
     std::cout << "Test cartridge connectivity..." << std::flush;
     std::vector<uint8_t> header;
-    read_cartridge(0x0000, 0x0000, &header);
+    read_memory(0x0000, 0x0000, &header);
     std::cout << "DONE" << std::endl;
 
     // read the ROM header and extract valuable information
     std::cout << "Test reading cartridge header info..." << std::flush;
-    read_cartridge(0x0000, 0x014F, &header);
+    read_memory(0x0000, 0x014F, &header);
     std::cout << "DONE" << std::endl;
     std::cout << "=========================================" << std::endl;
     print_header_details(header);
 
     std::cout << "=========================================" << std::endl;
-    std::cout << "Start reading ROM...please wait" << std::endl;
 
-    // read the complete ROM
     std::vector<uint8_t> data; // hold complete data
-    size_t bytes = read_cartridge(0x0000, 0x8000, &data, true);
+
+    if(header[0x0148] == 0x00) {
+        // read the complete ROM
+        size_t bytes = read_memory(0x0000, 0x8000, &data, true);
+        std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
+    } else {
+        size_t bytes = 0;
+        for(int i=1; i<4; i++) {
+            change_rom_bank(i, false); // false suppress output
+            std::cout << "Reading ROM BANK " << i << "... please wait" << std::endl;
+            if(i == 1) {
+                // read the first 16kb + the first rom bank (total 32kb)
+                bytes += read_memory(0x0000, 0x8000, &data, true);
+            } else {
+                bytes += read_memory(0x4000, 0x4000, &data, true);
+            }
+            std::cout << std::endl;
+        }
+
+        std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
+    }
 
     // close and clean-up
-    std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
     port.close();
 
     // store ROM data into file

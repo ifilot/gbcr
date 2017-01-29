@@ -38,7 +38,7 @@ ShiftRegisterSIPO::ShiftRegisterSIPO(volatile uint8_t *_port, volatile uint8_t *
     *(this->port) |=  (1 << this->rck);
 }
 
-void ShiftRegisterSIPO::output_8bit(uint8_t state) {
+void ShiftRegisterSIPO::write_8bit(uint8_t state) {
     // clock low
     *(this->port) &= ~(1 << this->clk);
     // latch low
@@ -60,52 +60,74 @@ void ShiftRegisterSIPO::output_8bit(uint8_t state) {
     *(this->port) |= (1 << this->rck);  // latch high
 }
 
-void ShiftRegisterSIPO::output_16bit(uint16_t state) {
+void ShiftRegisterSIPO::write_16bit(uint16_t state) {
     uint8_t hi = ((state >> 8) & 0xff);
     uint8_t lo = ((state >> 0) & 0xff);
 
-    this->output_8bit(hi);
-    this->output_8bit(lo);
+    this->write_8bit(hi);
+    this->write_8bit(lo);
 }
 
-ShiftRegisterPISO::ShiftRegisterPISO(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _ds, uint8_t _pl, uint8_t _cp, uint8_t _ce) {
+ShiftRegisterPISO::ShiftRegisterPISO(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _ds, uint8_t _pl, uint8_t _cp, uint8_t _ce, uint8_t _se) {
     this->ddr  =  _ddr;
     this->port =  _port;
     this->ds   =  _ds;
     this->pl   =  _pl;
     this->cp   =  _cp;
     this->ce   =  _ce;
+    this->se   =  _se;
 
     // enable ports
     *(this->ddr) &= ~(1 << this->ds); // input
     *(this->ddr) |= (1 << this->pl);  // output
     *(this->ddr) |= (1 << this->cp);  // output
     *(this->ddr) |= (1 << this->ce);  // output
+    *(this->ddr) |= (1 << this->se);  // output
 
     *(this->port) &= ~(1 << this->ds);    // low
     *(this->port) &= ~(1 << this->cp);    // low
     *(this->port) &= ~(1 << this->ce);    // low
     *(this->port) |= (1 << this->pl);     // high
+    *(this->port) &= ~(1 << this->se);     // low
 }
 
-uint8_t ShiftRegisterPISO::input_8bit() {
+uint8_t ShiftRegisterPISO::read_8bit() {
     uint8_t input = 0;
 
-    PORTC &= ~(1 << this->pl); // set parallel load low = enable
-    PORTC |= (1 << this->ce);  // set clock enable high = disable
-    PORTC &= ~(1 << this->ce); // enable clock
-    PORTC |= (1 << this->pl);  // disable parallel load
+    *(this->port) &= ~(1 << this->pl); // set parallel load low = enable
+    *(this->port) |= (1 << this->ce);  // set clock enable high = disable
+    *(this->port) &= ~(1 << this->ce); // enable clock
+    *(this->port) |= (1 << this->pl);  // disable parallel load
 
     // read in data
     for(int i=7; i>=0; i--) {
-        if(!(PINC & (1 << this->ds))) {
+        if(PINC & (1 << this->ds)) {  // fix this line!
             input |= (1 << i);
         }
-        
+
         // toggle clock high -> low (clock pulse)
-        PORTC |= (1 << this->cp);
-        PORTC &= ~(1 << this->cp);
+        *(this->port) |= (1 << this->cp);
+        *(this->port) &= ~(1 << this->cp);
     }
 
     return input;
+}
+
+void ShiftRegisterPISO::write_8bit(uint8_t state) {
+
+    *(this->port) &= ~(1 << this->ce); // enable clock
+    *(this->port) |= (1 << this->pl);  // disable parallel load
+
+    for(int i=7; i>=0; i--) {
+        if(state & (1 << i)) {
+            *(this->port) |= (1 << this->se);
+        } else {
+            *(this->port) &= ~(1 << this->se);
+        }
+
+        // toggle clock high -> low (clock pulse)
+        *(this->port) |= (1 << this->cp);
+        *(this->port) &= ~(1 << this->cp);
+    }
+
 }
