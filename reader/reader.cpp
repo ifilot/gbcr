@@ -71,6 +71,8 @@ size_t read_cartridge(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffe
         boost::asio::read(port, boost::asio::buffer(&c,1));
         if(cmd[i] != c[0]) {
             std::cerr << "An error occurred during data transfer, aborting!" << std::endl;
+            std::cerr << "Error encountered at " << __FILE__ << " (" << __LINE__ << ")" << std::endl;
+            std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << std::endl;
             exit(-1);
         }
     }
@@ -113,7 +115,7 @@ size_t read_cartridge(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffe
 void print_header_details(const std::vector<uint8_t> &header) {
     std::string title;
 
-    for(unsigned int i=0x0134; i<0x013E; i++) {
+    for(unsigned int i=0x0134; i<0x0143; i++) {
         title += (char)header[i];
     }
 
@@ -123,6 +125,12 @@ void print_header_details(const std::vector<uint8_t> &header) {
     switch(header[0x0147]) {
         case 0x00:
             std::cout << "ROM ONLY";
+        break;
+        case 0x01:
+            std::cout << "MBC1";
+        break;
+        case 0x02:
+            std::cout << "MBC1+RAM";
         break;
         default:
             std::cout << "Unknown type";
@@ -135,11 +143,33 @@ void print_header_details(const std::vector<uint8_t> &header) {
         case 0x00:
             std::cout << "32KByte (no ROM banking)";
         break;
+        case 0x01:
+            std::cout << "64KByte (4 banks)";
+        break;
+        case 0x02:
+            std::cout << "128 KByte (8 banks)";
+        break;
+        case 0x03:
+            std::cout << "256KByte 16 banks)";
+        break;
         default:
             std::cout << "Unknown size";
         break;
     }
     std::cout << std::endl;
+}
+
+int get_number_rom_banks(uint8_t rom_flag) {
+    switch(rom_flag) {
+        case 0x00:
+            return 0;
+        break;
+        case 0x01:
+            return 4;
+        break;
+    }
+
+    return 0;
 }
 
 int main(int argc, char** argv) {
@@ -159,9 +189,17 @@ int main(int argc, char** argv) {
     std::cout << "GameBoyCartridgeReader v.0.1 by Ivo Filot" << std::endl;
     std::cout << "=========================================" << std::endl;
 
-    // read the ROM header and extract valuable information
+    // test simple read instruction
+    std::cout << "Test cartridge connectivity..." << std::flush;
     std::vector<uint8_t> header;
+    read_cartridge(0x0000, 0x0000, &header);
+    std::cout << "DONE" << std::endl;
+
+    // read the ROM header and extract valuable information
+    std::cout << "Test reading cartridge header info..." << std::flush;
     read_cartridge(0x0000, 0x014F, &header);
+    std::cout << "DONE" << std::endl;
+    std::cout << "=========================================" << std::endl;
     print_header_details(header);
 
     std::cout << "=========================================" << std::endl;

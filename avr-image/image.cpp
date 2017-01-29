@@ -27,7 +27,7 @@
 #include "serial.h"
 #include "shift_register.h"
 
-//
+// serial, clock, latch
 ShiftRegisterSIPO sro(&PORTB, &DDRB, PINB1, PINB0, PINB2);
 
 // _ds, _pl, _cp, _ce
