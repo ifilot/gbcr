@@ -22,6 +22,7 @@
 #define _SHIFT_REGISTER_H
 
 #include <avr/io.h>
+#include <util/delay.h>
 
 /*
  * Class to control SIPO ShiftRegister such as the 74HC595
@@ -56,7 +57,8 @@ private:
 
 public:
     ShiftRegisterPISO(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _ds, uint8_t _pl, uint8_t _cp, uint8_t _ce, uint8_t _se);
-    uint8_t read_8bit();
+    void parallel_load();
+    uint8_t read_8bit(bool pl = true);
     void write_8bit(uint8_t state);
 };
 

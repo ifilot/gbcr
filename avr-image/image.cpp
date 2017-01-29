@@ -30,7 +30,7 @@
 // serial, clock, latch
 ShiftRegisterSIPO sro(&PORTB, &DDRB, PINB1, PINB0, PINB2);
 
-// _ds, _pl, _cp, _ce
+// _ds, _pl, _cp, _ce, _se
 ShiftRegisterPISO sri(&PORTC, &DDRC, PINC5, PINC3, PINC4, PINC2, PINC1);
 
 #define GBWR PINB3
@@ -73,9 +73,9 @@ void read_memory(uint16_t addr, uint16_t len) {
  * routine to select memory bank
  */
 void change_mbr(uint8_t bank_addr) {
-    // set write low
-    PORTB &= ~(1 << GBWR);    // low
-    PORTB |= (1 << GBRD);     // high
+    // set write
+    PORTB &= ~(1 << GBWR);    // write low
+    PORTB |= (1 << GBRD);     // read high
 
     // write address
     sro.write_16bit(0x2100);
@@ -85,11 +85,17 @@ void change_mbr(uint8_t bank_addr) {
     sri.write_8bit(bank_addr);
     _delay_ms(5);
 
-    // set write high and read low to
-    // disable write and enable read
-    PORTB |= (1 << GBWR);     // high
-    PORTB &= ~(1 << GBRD);    // low
+    // set read
+    PORTB |= (1 << GBWR);     // write high
+    PORTB &= ~(1 << GBRD);    // read low
     _delay_ms(5);
+}
+
+void read_dblock() {
+    uint8_t ret = sri.read_8bit(false);
+    char buf[3];
+    sprintf(buf, "%02X", ret);
+    SerialPort::get()->serial_send_line(buf, 2);
 }
 
 /*
@@ -154,8 +160,11 @@ void get_command() {
     //
     // READ XXXX XXXX --> read instruction
     // CHAN GEBA NKXX --> change bank position
+    // READ DXXB LOCK --> read current values at D-block
 
-    if(strncmp(cmd, "READ", 4) == 0) {
+    if(strncmp(cmd, "READDXXBLOCK", 12) == 0) {
+        read_dblock();
+    } else if(strncmp(cmd, "READ", 4) == 0) {
         uint16_t addr = char2hex4(&cmd[4]);
         uint16_t len  = char2hex4(&cmd[8]);
         read_memory(addr, len);

@@ -55,24 +55,41 @@ int change_rom_bank(uint8_t bank_addr, bool output) {
     char c[12];
 
     if(output) {
-        std::cout << "Changing to ROM BANK: " << (char)(bank_addr+48) << "  " << std::flush;
+        std::cout << "Changing to ROM BANK: " << (int)bank_addr << "  " << std::endl;
     }
 
     char cmd[13] = {'C', 'H', 'A', 'N', 'G', 'E', 'B', 'A', 'N', 'K', '0', '0','0'};
     sprintf(&cmd[10], "%02X", bank_addr);
-    std::cout << cmd << std::endl;
     for(unsigned int i=0; i<12; i++) {
         boost::asio::write(port, boost::asio::buffer(&cmd[i], 1));
         boost::asio::read(port, boost::asio::buffer(&c,1));
         if(cmd[i] != c[0]) {
             std::cerr << "An error occurred during data transfer, aborting!" << std::endl;
             std::cerr << "Error encountered at " << __FILE__ << " (" << __LINE__ << ")" << std::endl;
-            std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << std::endl;
+            std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << "| i=" << i << std::endl;
             exit(-1);
         }
     }
 
+    char cmd2[12] = {'R', 'E', 'A', 'D', 'D', 'X', 'X', 'B', 'L', 'O', 'C', 'K'};
+    for(unsigned int i=0; i<12; i++) {
+        boost::asio::write(port, boost::asio::buffer(&cmd2[i], 1));
+        boost::asio::read(port, boost::asio::buffer(&c,1));
+        if(cmd2[i] != c[0]) {
+            std::cerr << "An error occurred during data transfer, aborting!" << std::endl;
+            std::cerr << "Error encountered at " << __FILE__ << " (" << __LINE__ << ")" << std::endl;
+            std::cerr << "Send: " << cmd2[i] << " | Receive: " << c[0] << "| i=" << i << std::endl;
+            exit(-1);
+        }
+    }
+
+    std::cout << "Checking right memory bank: " << std::flush;
+    boost::asio::read(port, boost::asio::buffer(&c,2));
+    c[2] = '\0';
+    int bank = strtoul(c, NULL, 16);
+
     if(output) {
+        std::cout << (int)bank_addr << " = " << bank << std::endl;
         std::cout << "Done" << std::endl;
     }
 }
@@ -99,7 +116,7 @@ size_t read_memory(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffer, 
         if(cmd[i] != c[0]) {
             std::cerr << "An error occurred during data transfer, aborting!" << std::endl;
             std::cerr << "Error encountered at " << __FILE__ << " (" << __LINE__ << ")" << std::endl;
-            std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << std::endl;
+            std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << "| i=" << i << std::endl;
             exit(-1);
         }
     }
@@ -107,7 +124,7 @@ size_t read_memory(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffer, 
     // read addr line
     boost::asio::read(port, boost::asio::buffer(&c,8));
     c[8] = '\0';
-    size_t addr = strtoul(&c[0], NULL, 16);
+    size_t addr = strtoul(&c[4], NULL, 16);
 
     // read size line
     boost::asio::read(port, boost::asio::buffer(&c,8));
@@ -115,7 +132,6 @@ size_t read_memory(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffer, 
     size_t size = strtoul(&c[4], NULL, 16);
 
     size_t bytes = 0;
-
     while(bytes < size) {
         boost::asio::read(port, boost::asio::buffer(&c,2));
         c[2] = '\0';
@@ -239,9 +255,9 @@ int main(int argc, char** argv) {
         std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
     } else {
         size_t bytes = 0;
-        for(int i=1; i<4; i++) {
-            change_rom_bank(i, false); // false suppress output
-            std::cout << "Reading ROM BANK " << i << "... please wait" << std::endl;
+        for(uint8_t i=1; i<4; i++) {
+            change_rom_bank(i, true); // false suppress output
+            std::cout << "Reading ROM BANK " << (int)i << "... please wait" << std::endl;
             if(i == 1) {
                 // read the first 16kb + the first rom bank (total 32kb)
                 bytes += read_memory(0x0000, 0x8000, &data, true);
