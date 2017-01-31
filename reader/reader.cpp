@@ -153,8 +153,38 @@ void print_header_details(const std::vector<uint8_t> &header) {
         case 0x02:
             std::cout << "MBC1+RAM";
         break;
+        case 0x03:
+            std::cout << "MBC1+RAM+BATTERY";
+        break;
+        case 0x05:
+            std::cout << "MBC2";
+        break;
+        case 0x06:
+            std::cout << "MBC2+BATTERY";
+        break;
+        case 0x08:
+            std::cout << "ROM+RAM";
+        break;
+        case 0x09:
+            std::cout << "ROM+RAM+BATTERY";
+        break;
+        case 0x0F:
+            std::cout << "MBC3+TIMER+BATTERY";
+        break;
+        case 0x10:
+            std::cout << "MBC3+TIMER+RAM+BATTERY";
+        break;
+        case 0x11:
+            std::cout << "MBC3";
+        break;
+        case 0x12:
+            std::cout << "MBC3+RAM";
+        break;
+        case 0x13:
+            std::cout << "MBC3+RAM+BATTERY";
+        break;
         default:
-            std::cout << "Unknown type";
+            std::cout << "Unknown type: " << (int)header[0x147];
         break;
     }
     std::cout << std::endl;
@@ -171,15 +201,37 @@ void print_header_details(const std::vector<uint8_t> &header) {
             std::cout << "128 KByte (8 banks)";
         break;
         case 0x03:
-            std::cout << "256KByte 16 banks)";
+            std::cout << "256KByte (16 banks)";
+        break;
+        case 0x04:
+            std::cout << "512KByte (32 banks)";
+        break;
+        case 0x05:
+            std::cout << "1MByte (64 banks)";
+        break;
+        case 0x06:
+            std::cout << "2MByte (128 banks)";
+        break;
+        case 0x07:
+            std::cout << "4MByte (256 banks)";
         break;
         default:
-            std::cout << "Unknown size";
+            std::cout << "Unknown size: " << (int)header[0x148];
         break;
     }
     std::cout << std::endl;
 }
 
+/*
+ * get_number_rom_banks
+ *
+ * Get number of ROM banks based on header byte
+ *
+ * @param rom_flag - rom size header byte
+ *
+ * @return number of ROM banks
+ *
+ */
 int get_number_rom_banks(uint8_t rom_flag) {
     switch(rom_flag) {
         case 0x00:
@@ -187,6 +239,24 @@ int get_number_rom_banks(uint8_t rom_flag) {
         break;
         case 0x01:
             return 4;
+        break;
+        case 0x02:
+            return 8;
+        break;
+        case 0x03:
+            return 16;
+        break;
+        case 0x04:
+            return 32;
+        break;
+        case 0x05:
+            return 64;
+        break;
+        case 0x06:
+            return 128;
+        break;
+        case 0x07:
+            return 256;
         break;
     }
 
@@ -207,7 +277,7 @@ int main(int argc, char** argv) {
     port.set_option(boost::asio::serial_port_base::baud_rate(57600));
 
     std::cout << "=========================================" << std::endl;
-    std::cout << "GameBoyCartridgeReader v.0.1 by Ivo Filot" << std::endl;
+    std::cout << "GameBoyCartridgeReader v.0.2 by Ivo Filot" << std::endl;
     std::cout << "=========================================" << std::endl;
 
     // test simple read instruction
@@ -233,13 +303,14 @@ int main(int argc, char** argv) {
         std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
     } else {
         size_t bytes = 0;
-        for(uint8_t i=1; i<4; i++) {
+        for(uint8_t i=1; i<get_number_rom_banks(header[0x148]); i++) {
             change_rom_bank(i, true); // false suppress output
-            std::cout << "Reading ROM BANK " << (int)i << "... please wait" << std::endl;
             if(i == 1) {
                 // read the first 16kb + the first rom bank (total 32kb)
+                std::cout << "Reading ROM BANKS 0+1... please wait" << std::endl;
                 bytes += read_memory(0x0000, 0x8000, &data, true);
             } else {
+                std::cout << "Reading ROM BANK " << (int)i << "... please wait" << std::endl;
                 bytes += read_memory(0x4000, 0x4000, &data, true);
             }
             std::cout << std::endl;
