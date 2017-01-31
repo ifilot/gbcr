@@ -57,8 +57,28 @@ private:
 
 public:
     ShiftRegisterPISO(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _ds, uint8_t _pl, uint8_t _cp, uint8_t _ce, uint8_t _se);
-    void parallel_load();
-    uint8_t read_8bit(bool pl = true);
+    uint8_t read_8bit();
+};
+
+/*
+ * Class to control PISO ShiftRegister such as the 74HC165
+ */
+class ShiftRegisterUniversal {
+private:
+    volatile uint8_t *port;
+    volatile uint8_t *ddr;
+
+    uint8_t s0;    //
+    uint8_t s1;    //
+    uint8_t ds0;   // serial input left
+    uint8_t q7;    // serial output right
+    uint8_t cp;    // clock pulse
+    uint8_t oe1;   // output enable 1
+
+public:
+    ShiftRegisterUniversal(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _s0, uint8_t _s1, uint8_t _ds0, uint8_t _q7, uint8_t _cp, uint8_t _oe1);
+    uint8_t read_8bit();
+    uint8_t shift_out();
     void write_8bit(uint8_t state);
 };
 

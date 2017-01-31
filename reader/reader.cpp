@@ -70,28 +70,6 @@ int change_rom_bank(uint8_t bank_addr, bool output) {
             exit(-1);
         }
     }
-
-    char cmd2[12] = {'R', 'E', 'A', 'D', 'D', 'X', 'X', 'B', 'L', 'O', 'C', 'K'};
-    for(unsigned int i=0; i<12; i++) {
-        boost::asio::write(port, boost::asio::buffer(&cmd2[i], 1));
-        boost::asio::read(port, boost::asio::buffer(&c,1));
-        if(cmd2[i] != c[0]) {
-            std::cerr << "An error occurred during data transfer, aborting!" << std::endl;
-            std::cerr << "Error encountered at " << __FILE__ << " (" << __LINE__ << ")" << std::endl;
-            std::cerr << "Send: " << cmd2[i] << " | Receive: " << c[0] << "| i=" << i << std::endl;
-            exit(-1);
-        }
-    }
-
-    std::cout << "Checking right memory bank: " << std::flush;
-    boost::asio::read(port, boost::asio::buffer(&c,2));
-    c[2] = '\0';
-    int bank = strtoul(c, NULL, 16);
-
-    if(output) {
-        std::cout << (int)bank_addr << " = " << bank << std::endl;
-        std::cout << "Done" << std::endl;
-    }
 }
 
 /*

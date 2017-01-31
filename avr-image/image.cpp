@@ -30,11 +30,30 @@
 // serial, clock, latch
 ShiftRegisterSIPO sro(&PORTB, &DDRB, PINB1, PINB0, PINB2);
 
-// _ds, _pl, _cp, _ce, _se
-ShiftRegisterPISO sri(&PORTC, &DDRC, PINC5, PINC3, PINC4, PINC2, PINC1);
+ShiftRegisterUniversal sru(&PORTC, &DDRC, PINC0, PINC1, PINC2, PINC3, PINC4, PINC5);
 
 #define GBWR PINB3
 #define GBRD PINB4
+
+void output_3bit(uint8_t addr) {
+    if(bit_is_set(addr, 0)) {
+        DDRD |= (1 << PIND2);
+    } else {
+        DDRD &= ~(1 << PIND2);
+    }
+
+    if(bit_is_set(addr, 1)) {
+        DDRD |= (1 << PIND3);
+    } else {
+        DDRD &= ~(1 << PIND3);
+    }
+
+    if(bit_is_set(addr, 2)) {
+        DDRD |= (1 << PIND4);
+    } else {
+        DDRD &= ~(1 << PIND4);
+    }
+}
 
 /*
  * read_memory
@@ -57,7 +76,7 @@ void read_memory(uint16_t addr, uint16_t len) {
     uint16_t pos  = addr;
     while(pos < (uint16_t)addr + len) {
         sro.write_16bit(pos);
-        uint8_t input = sri.read_8bit();
+        uint8_t input = sru.read_8bit();
         sprintf(buf, "%02X", input);
         SerialPort::get()->serial_send_line(buf, 2);
         pos++;
@@ -73,29 +92,28 @@ void read_memory(uint16_t addr, uint16_t len) {
  * routine to select memory bank
  */
 void change_mbr(uint8_t bank_addr) {
+    output_3bit(bank_addr);
+
     // set write
     PORTB &= ~(1 << GBWR);    // write low
     PORTB |= (1 << GBRD);     // read high
+    _delay_ms(5);
 
     // write address
     sro.write_16bit(0x2100);
     _delay_ms(5);
 
     // write bank
-    sri.write_8bit(bank_addr);
+    sru.write_8bit(bank_addr);
     _delay_ms(5);
 
     // set read
     PORTB |= (1 << GBWR);     // write high
     PORTB &= ~(1 << GBRD);    // read low
     _delay_ms(5);
-}
 
-void read_dblock() {
-    uint8_t ret = sri.read_8bit(false);
-    char buf[3];
-    sprintf(buf, "%02X", ret);
-    SerialPort::get()->serial_send_line(buf, 2);
+    // get address that was written
+    uint8_t out = sru.shift_out();
 }
 
 /*
@@ -160,15 +178,12 @@ void get_command() {
     //
     // READ XXXX XXXX --> read instruction
     // CHAN GEBA NKXX --> change bank position
-    // READ DXXB LOCK --> read current values at D-block
 
-    if(strncmp(cmd, "READDXXBLOCK", 12) == 0) {
-        read_dblock();
-    } else if(strncmp(cmd, "READ", 4) == 0) {
+    if(strncmp(cmd, "READ", 4) == 0) {
         uint16_t addr = char2hex4(&cmd[4]);
         uint16_t len  = char2hex4(&cmd[8]);
         read_memory(addr, len);
-    } else if(strncmp(cmd, "CHNGBANK", 8) == 0) {
+    } else if(strncmp(cmd, "CHANGEBANK", 10) == 0) {
         uint8_t bank_addr = char2hex2(&cmd[10]);
         change_mbr(bank_addr);
     }
@@ -189,6 +204,14 @@ void setup() {
     // disable write and enable read
     PORTB |= (1 << GBWR);     // high
     PORTB &= ~(1 << GBRD);    // low
+
+    PORTD |= (1 << PIND2);
+    PORTD |= (1 << PIND3);
+    PORTD |= (1 << PIND4);
+
+    DDRD &= ~(1 << PIND2);
+    DDRD &= ~(1 << PIND3);
+    DDRD &= ~(1 << PIND4);
 }
 
 /*
@@ -200,6 +223,12 @@ void setup() {
 int main(void) {
     // setup GB pins
     setup();
+
+    for(uint8_t i=0; i<8; i++) {
+        output_3bit(i);
+        _delay_ms(500);
+    }
+    output_3bit(0);
 
     // setup serial connection
     SerialPort::get();

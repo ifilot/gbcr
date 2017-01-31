@@ -91,19 +91,13 @@ ShiftRegisterPISO::ShiftRegisterPISO(volatile uint8_t *_port, volatile uint8_t *
     *(this->port) &= ~(1 << this->se);    // low
 }
 
-void ShiftRegisterPISO::parallel_load() {
+uint8_t ShiftRegisterPISO::read_8bit() {
+    uint8_t input = 0;
+
     *(this->port) &= ~(1 << this->pl); // set parallel load low = enable
     *(this->port) |= (1 << this->ce);  // set clock enable high = disable
     *(this->port) &= ~(1 << this->ce); // enable clock
     *(this->port) |= (1 << this->pl);  // disable parallel load
-}
-
-uint8_t ShiftRegisterPISO::read_8bit(bool pl) {
-    uint8_t input = 0;
-
-    if(pl) {
-        this->parallel_load();
-    }
 
     // read in data
     for(int i=7; i>=0; i--) {
@@ -119,22 +113,119 @@ uint8_t ShiftRegisterPISO::read_8bit(bool pl) {
     return input;
 }
 
-void ShiftRegisterPISO::write_8bit(uint8_t state) {
+ShiftRegisterUniversal::ShiftRegisterUniversal(volatile uint8_t *_port, volatile uint8_t *_ddr, uint8_t _s0, uint8_t _s1, uint8_t _ds0, uint8_t _q7, uint8_t _cp, uint8_t _oe1) {
+    this->port = _port;
+    this->ddr = _ddr;
+    this->s0 = _s0;
+    this->s1 = _s1;
+    this->ds0 = _ds0;
+    this->q7 = _q7;
+    this->cp = _cp;
+    this->oe1 = _oe1;
+
+    // enable ports
+    *(this->ddr) |= ~(1 << this->s0); // output
+    *(this->ddr) |= (1 << this->s1);  // output
+    *(this->ddr) |= (1 << this->ds0);  // output
+    *(this->ddr) |= (1 << this->cp);  // output
+    *(this->ddr) |= (1 << this->oe1);  // output
+    *(this->ddr) &= ~(1 << this->q7);  // input
+
+    *(this->port) &= ~(1 << this->s0);
+    *(this->port) &= ~(1 << this->s1);
+    *(this->port) &= ~(1 << this->ds0);
     *(this->port) &= ~(1 << this->cp);
-    *(this->port) &= ~(1 << this->ce); // enable clock
-    *(this->port) |= (1 << this->pl);  // disable parallel load
+    *(this->port) &= ~(1 << this->q7);
+    *(this->port) |= (1 << this->oe1);  // start with disabling output
+}
+
+void ShiftRegisterUniversal::write_8bit(uint8_t state) {
+    // clock low and disable output (while shifting)
+    *(this->port) &= ~(1 << this->cp);
+    *(this->port) |= (1 << this->oe1);
+
+    // enable shift right
+    *(this->port) |= (1 << this->s0);
+    *(this->port) &= ~(1 << this->s1);
 
     for(int i=7; i>=0; i--) {
+
         if(bit_is_set(state, i)) {
-            *(this->port) |= (1 << PINC1);
+            *(this->port) |= (1 << this->ds0);
         } else {
-            *(this->port) &= ~(1 << PINC1);
+            *(this->port) &= ~(1 << this->ds0);
         }
-        _delay_ms(5);
+
+        *(this->port) |= (1 << this->cp);  // clock high
+        *(this->port) &= ~(1 << this->cp); // clock low
+    }
+
+    // do nothing (halt) and enable output
+    *(this->port) &= ~(1 << this->s0);
+    *(this->port) &= ~(1 << this->s1);
+    *(this->port) &= ~(1 << this->oe1);
+}
+
+uint8_t ShiftRegisterUniversal::read_8bit() {
+    uint8_t input = 0;
+
+    // clock low
+    *(this->port) &= ~(1 << this->cp);
+    *(this->port) |= (1 << this->oe1);  // disable output
+
+    // set parallel load and do clock pulse
+    *(this->port) |= (1 << this->s0);
+    *(this->port) |= (1 << this->s1);
+    *(this->port) |= (1 << this->cp);  // clock high
+    *(this->port) &= ~(1 << this->cp); // clock low
+
+    // enable shift right
+    *(this->port) |= (1 << this->s0);
+    *(this->port) &= ~(1 << this->s1);
+
+    // read in data
+    for(int i=7; i>=0; i--) {
+        if(PINC & (1 << this->q7)) {  // fix this line! (PINC)
+            input |= (1 << i);
+        }
 
         // toggle clock high -> low (clock pulse)
         *(this->port) |= (1 << this->cp);
         *(this->port) &= ~(1 << this->cp);
     }
 
+    // do nothing (halt)
+    *(this->port) &= ~(1 << this->s0);
+    *(this->port) &= ~(1 << this->s1);
+
+    return input;
+}
+
+uint8_t ShiftRegisterUniversal::shift_out() {
+    uint8_t input = 0;
+
+    // clock low
+    *(this->port) &= ~(1 << this->cp);
+    *(this->port) |= ~(1 << this->oe1);  // disable output
+
+    // enable shift right
+    *(this->port) |= (1 << this->s0);
+    *(this->port) &= ~(1 << this->s1);
+
+    // read in data
+    for(int i=7; i>=0; i--) {
+        if(PINC & (1 << this->q7)) {  // fix this line! (PINC)
+            input |= (1 << i);
+        }
+
+        // toggle clock high -> low (clock pulse)
+        *(this->port) |= (1 << this->cp);
+        *(this->port) &= ~(1 << this->cp);
+    }
+
+    // do nothing (halt)
+    *(this->port) &= ~(1 << this->s0);
+    *(this->port) &= ~(1 << this->s1);
+
+    return input;
 }
