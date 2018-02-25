@@ -1,4 +1,4 @@
-# WinAVR cross-compiler toolchain is used here
+# AVR cross-compiler toolchain is used here
 CC = avr-gcc
 CXX = avr-g++
 OBJCOPY = avr-objcopy

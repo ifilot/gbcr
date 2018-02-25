@@ -109,8 +109,34 @@ void write_byte(uint16_t addr, uint8_t byte) {
 
     // write pulse
     PORTB &= ~(1 << GBWR);
-    _delay_ms(50);
+
+    asm volatile("nop");
+    asm volatile("nop");
+    asm volatile("nop");
+
     PORTB |= (1 << GBWR);
+}
+
+/*
+ * write_ram
+ *
+ * @param len  - Bytes to write
+ *
+ */
+void write_ram(uint16_t len) {
+    uint16_t it  = 0;
+
+    PORTD |= (1 << LED2); // enable led2 (operation)
+    while(it < len) {
+        char c = SerialPort::get()->serial_receive();
+        SerialPort::get()->serial_send(c);
+        write_byte(0xA000 + it, c);
+        it++;
+    }
+    PORTD &= ~(1 << LED2); // disable led2 (done)
+
+    // reset shift registers to 0
+    sro.write_16bit(0);
 }
 
 /*
@@ -175,6 +201,7 @@ void get_command() {
     //
     // READ XXXX XXXX --> read instruction
     // WRBY XXXX XXXX --> write single byte at specified address
+    // WRIT ERAM XXXX --> write instruction
 
     if(strncmp(cmd, "READ", 4) == 0) {
         uint16_t addr = char2hex4(&cmd[4]);
@@ -184,6 +211,9 @@ void get_command() {
         uint16_t addr = char2hex4(&cmd[4]);
         uint8_t value = char2hex2(&cmd[10]);
         write_byte(addr, value);
+    } else if(strncmp(cmd, "WRITERAM", 8) == 0) {
+        uint16_t len = char2hex4(&cmd[8]);
+        write_ram(len);
     }
 }
 
