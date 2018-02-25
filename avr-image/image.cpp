@@ -34,6 +34,8 @@ ShiftRegisterUniversal sru(&PORTC, &DDRC, PINC0, PINC1, PINC2, PINC3, PINC4, PIN
 
 #define GBWR PINB3
 #define GBRD PINB4
+#define LED1 PIND2
+#define LED2 PIND3
 
 /*
  * read_memory
@@ -54,6 +56,8 @@ void read_memory(uint16_t addr, uint16_t len) {
     SerialPort::get()->serial_send_line(buf, 8);
 
     uint16_t pos  = addr;
+
+    PORTD |= (1 << LED2); // enable led2 (operation)
     while(pos < (uint16_t)addr + len) {
         sro.write_16bit(pos);
         uint8_t input = sru.read_8bit();
@@ -61,6 +65,7 @@ void read_memory(uint16_t addr, uint16_t len) {
         SerialPort::get()->serial_send_line(buf, 2);
         pos++;
     }
+    PORTD &= ~(1 << LED2); // disable led2 (done)
 
     // reset shift registers to 0
     sro.write_16bit(0);
@@ -175,10 +180,17 @@ void setup() {
     DDRB |= (1 << GBWR);  // output
     DDRB |= (1 << GBRD);  // output
 
+    // enable leds
+    DDRD |= (1 << LED1);  // output
+    DDRD |= (1 << LED2);  // output
+
     // set write high and read low to
     // disable write and enable read
     PORTB |= (1 << GBWR);     // high
     PORTB &= ~(1 << GBRD);    // low
+
+    // set high to set active
+    PORTD |= (1 << LED1);     // high
 }
 
 /*

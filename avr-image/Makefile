@@ -6,10 +6,15 @@ DUDE = avrdude
 F_CPU = 16000000
 FUSEL = 0xFF
 FUSEH = 0xDE
-EFUSE = 0x05
+EFUSE = 0xFD
+
+# fuse settings
+# 0xFF: external clock source 8+ MHz
+# 0xDE: SPIEN & BOOTRST enables
+# 0xFD: brownout at 2.7 V
 
 # update the lines below to match your configuration
-CFLAGS = -std=c++11 -Wall -Os -mmcu=atmega328p -DF_CPU=$(F_CPU) -DDEBUG_LEVEL=0 -fno-threadsafe-statics
+CFLAGS = -std=c++11 -Wall -O1 -mmcu=atmega328p -DF_CPU=$(F_CPU) -DDEBUG_LEVEL=0 -fno-threadsafe-statics
 OBJFLAGS = -j .text -j .data -O ihex
 DUDEFLAGS = -p atmega328p -c usbasp
 
@@ -42,7 +47,7 @@ image.elf: $(OBJECTS)
 	$(CC) $(CFLAGS) $(OBJECTS) -o $@
 
 # Without this dependency, .o files will not be recompiled upon some changes
-$(OBJECTS): 
+$(OBJECTS):
 
 # From C source to .o object file
 %.o: %.c

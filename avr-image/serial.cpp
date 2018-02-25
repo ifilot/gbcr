@@ -34,7 +34,7 @@ SerialPort::SerialPort(){
 
     // high and low bits
     UBRR0H = (this->baud_rate_calc >> 8);
-    UBRR0L = this->baud_rate_calc; 
+    UBRR0L = this->baud_rate_calc;
 
     //transmit and receive enable
     UCSR0B = (1 << TXEN0)| (1 << TXCIE0) | (1 << RXEN0) | (1 << RXCIE0);
