@@ -55,10 +55,10 @@ int write_command_word(const char* cmd) {
     // create buffer
     char c[12];
 
-    for(unsigned int i=0; i<12; i++) {
-        std::cout << cmd[i];
-    }
-    std::cout << std::endl;
+    // for(unsigned int i=0; i<12; i++) {
+    //     std::cout << cmd[i];
+    // }
+    // std::cout << std::endl;
 
     for(unsigned int i=0; i<12; i++) {
         boost::asio::write(port, boost::asio::buffer(&cmd[i], 1));
@@ -77,27 +77,18 @@ int change_rom_bank(uint8_t type, uint8_t bank_addr, bool output) {
         std::cout << "Changing to ROM BANK: " << (int)bank_addr << "  " << std::endl;
     }
 
-    switch(type) {
-        case 0x13: {
-            // write lower 5 bits
-            char cmd1[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
-            uint8_t low5bit = bank_addr & 31;
-            sprintf(&cmd1[4], "%04X%04X", 0x2100, low5bit);
-            write_command_word(cmd1);
+    char cmd[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
 
-            // write higher 2 bits
-            char cmd2[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
-            uint8_t higher2bit = bank_addr >> 5;
-            sprintf(&cmd2[4], "%04X%04X", 0x4000, higher2bit);
-            //write_command_word(cmd2);
-        }
-        break;
-        default: {
-            char cmd[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
-            sprintf(&cmd[4], "%04X%04X", 0x2100, bank_addr);
-            write_command_word(cmd);
-        }
-        break;
+    if(type >= 5) {
+        sprintf(&cmd[4], "%04X%04X", 0x2100, bank_addr);
+        write_command_word(cmd);
+    } else {
+        sprintf(&cmd[4], "%04X%04X", 0x6000, 0x00);
+        write_command_word(cmd);
+        sprintf(&cmd[4], "%04X%04X", 0x4000, bank_addr >> 5);
+        write_command_word(cmd);
+        sprintf(&cmd[4], "%04X%04X", 0x2100, bank_addr & 0x1F);
+        write_command_word(cmd);
     }
 }
 
@@ -203,10 +194,17 @@ void print_header_details(const std::vector<uint8_t> &header) {
         case 0x13:
             std::cout << "MBC3+RAM+BATTERY";
         break;
+        case 0x19:
+            std::cout << "MBC5";
+        break;
+        case 0x1A:
+            std::cout << "MBC5+RAM";
+        break;
         default:
             std::cout << "Unknown type: " << (int)header[0x147];
         break;
     }
+    std::cout << " (" << (int)header[0x0147] << ")";
     std::cout << std::endl;
 
     std::cout << "ROM Size:        ";
@@ -334,9 +332,6 @@ int main(int argc, char** argv) {
             size_t bytes = 0;
             for(uint8_t i=1; i<get_number_rom_banks(header[0x148]); i++) {
                 change_rom_bank(header[0x0147], i, true); // false suppress output
-                if(i == 2) {
-                    break;
-                }
                 if(i == 1) {
                     // read the first 16kb + the first rom bank (total 32kb)
                     std::cout << "Reading ROM BANKS 0+1... please wait" << std::endl;

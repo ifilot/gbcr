@@ -32,10 +32,36 @@ ShiftRegisterSIPO sro(&PORTB, &DDRB, PINB1, PINB0, PINB2);
 
 ShiftRegisterUniversal sru(&PORTC, &DDRC, PINC0, PINC1, PINC2, PINC3, PINC4, PINC5);
 
-#define GBWR PINB3
-#define GBRD PINB4
-#define LED1 PIND2
-#define LED2 PIND3
+#define GBWR  PINB3
+#define GBRD  PINB4
+#define GBREQ PIND5
+#define LED1  PIND2
+#define LED2  PIND3
+
+void reset_pins() {
+    PORTB |= (1 << GBWR);     // no write
+    PORTB |= (1 << GBRD);     // no read
+    PORTD |= (1 << GBREQ);    // no req
+
+}
+
+uint8_t read_byte(uint16_t addr) {
+    sro.write_16bit(addr);
+
+    PORTB &= ~(1 << GBRD);
+    PORTD &= ~(1 << GBREQ);
+
+    asm volatile("nop");
+    asm volatile("nop");
+    asm volatile("nop");
+
+    uint8_t input = sru.read_8bit();
+
+    PORTB |= (1 << GBRD);
+    PORTD |= (1 << GBREQ);
+
+    return input;
+}
 
 /*
  * read_memory
@@ -49,6 +75,7 @@ ShiftRegisterUniversal sru(&PORTC, &DDRC, PINC0, PINC1, PINC2, PINC3, PINC4, PIN
  */
 void read_memory(uint16_t addr, uint16_t len) {
     char buf[10];
+    uint8_t val;
 
     sprintf(buf, "ADDR%04X", addr);
     SerialPort::get()->serial_send_line(buf, 8);
@@ -59,9 +86,8 @@ void read_memory(uint16_t addr, uint16_t len) {
 
     PORTD |= (1 << LED2); // enable led2 (operation)
     while(pos < (uint16_t)addr + len) {
-        sro.write_16bit(pos);
-        uint8_t input = sru.read_8bit();
-        sprintf(buf, "%02X", input);
+        val = read_byte(pos);
+        sprintf(buf, "%02X", val);
         SerialPort::get()->serial_send_line(buf, 2);
         pos++;
     }
@@ -77,23 +103,14 @@ void read_memory(uint16_t addr, uint16_t len) {
  * routine to select memory bank
  */
 void write_byte(uint16_t addr, uint8_t byte) {
-    // set write
-    PORTB &= ~(1 << GBWR);    // write low
-    PORTB |= (1 << GBRD);     // read high
-    _delay_ms(5);
-
     // write address
     sro.write_16bit(addr);
-    _delay_ms(5);
-
-    // write bank
     sru.write_8bit(byte);
-    _delay_ms(5);
 
-    // set read
-    PORTB |= (1 << GBWR);     // write high
-    PORTB &= ~(1 << GBRD);    // read low
-    _delay_ms(5);
+    // write pulse
+    PORTB &= ~(1 << GBWR);
+    _delay_ms(50);
+    PORTB |= (1 << GBWR);
 }
 
 /*
@@ -181,9 +198,10 @@ void setup() {
     DDRB |= (1 << GBWR);  // output
     DDRB |= (1 << GBRD);  // output
 
-    // enable leds
-    DDRD |= (1 << LED1);  // output
-    DDRD |= (1 << LED2);  // output
+    // enable PORTD pins
+    DDRD |= (1 << LED1);   // output
+    DDRD |= (1 << LED2);   // output
+    DDRD |= (1 << GBREQ);  // output
 
     // set write high and read low to
     // disable write and enable read
@@ -209,6 +227,7 @@ int main(void) {
 
     // set address to 0
     sro.write_16bit(0);
+    reset_pins();
 
     while(1) {
         get_command();
