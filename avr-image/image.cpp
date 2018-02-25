@@ -72,22 +72,22 @@ void read_memory(uint16_t addr, uint16_t len) {
 }
 
 /*
- * change_mbr
+ * write_byte
  *
  * routine to select memory bank
  */
-void change_mbr(uint8_t bank_addr) {
+void write_byte(uint16_t addr, uint8_t byte) {
     // set write
     PORTB &= ~(1 << GBWR);    // write low
     PORTB |= (1 << GBRD);     // read high
     _delay_ms(5);
 
     // write address
-    sro.write_16bit(0x2100);
+    sro.write_16bit(addr);
     _delay_ms(5);
 
     // write bank
-    sru.write_8bit(bank_addr);
+    sru.write_8bit(byte);
     _delay_ms(5);
 
     // set read
@@ -157,15 +157,16 @@ void get_command() {
     // command list
     //
     // READ XXXX XXXX --> read instruction
-    // CHAN GEBA NKXX --> change bank position
+    // WRBY XXXX XXXX --> write single byte at specified address
 
     if(strncmp(cmd, "READ", 4) == 0) {
         uint16_t addr = char2hex4(&cmd[4]);
         uint16_t len  = char2hex4(&cmd[8]);
         read_memory(addr, len);
-    } else if(strncmp(cmd, "CHANGEBANK", 10) == 0) {
-        uint8_t bank_addr = char2hex2(&cmd[10]);
-        change_mbr(bank_addr);
+    } else if(strncmp(cmd, "WRBY", 4) == 0) {
+        uint16_t addr = char2hex4(&cmd[4]);
+        uint8_t value = char2hex2(&cmd[10]);
+        write_byte(addr, value);
     }
 }
 

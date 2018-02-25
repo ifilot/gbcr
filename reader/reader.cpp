@@ -25,6 +25,7 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <tclap/CmdLine.h>
 
 boost::asio::io_service io;
 boost::asio::serial_port port(io);
@@ -50,16 +51,15 @@ static inline void print_loadbar(unsigned int x, unsigned int n, unsigned int w 
     std::cout << "]\r" << std::flush;
 }
 
-int change_rom_bank(uint8_t bank_addr, bool output) {
+int write_command_word(const char* cmd) {
     // create buffer
     char c[12];
 
-    if(output) {
-        std::cout << "Changing to ROM BANK: " << (int)bank_addr << "  " << std::endl;
+    for(unsigned int i=0; i<12; i++) {
+        std::cout << cmd[i];
     }
+    std::cout << std::endl;
 
-    char cmd[13] = {'C', 'H', 'A', 'N', 'G', 'E', 'B', 'A', 'N', 'K', '0', '0','0'};
-    sprintf(&cmd[10], "%02X", bank_addr);
     for(unsigned int i=0; i<12; i++) {
         boost::asio::write(port, boost::asio::buffer(&cmd[i], 1));
         boost::asio::read(port, boost::asio::buffer(&c,1));
@@ -69,6 +69,35 @@ int change_rom_bank(uint8_t bank_addr, bool output) {
             std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << "| i=" << i << std::endl;
             exit(-1);
         }
+    }
+}
+
+int change_rom_bank(uint8_t type, uint8_t bank_addr, bool output) {
+    if(output) {
+        std::cout << "Changing to ROM BANK: " << (int)bank_addr << "  " << std::endl;
+    }
+
+    switch(type) {
+        case 0x13: {
+            // write lower 5 bits
+            char cmd1[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
+            uint8_t low5bit = bank_addr & 31;
+            sprintf(&cmd1[4], "%04X%04X", 0x2100, low5bit);
+            write_command_word(cmd1);
+
+            // write higher 2 bits
+            char cmd2[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
+            uint8_t higher2bit = bank_addr >> 5;
+            sprintf(&cmd2[4], "%04X%04X", 0x4000, higher2bit);
+            //write_command_word(cmd2);
+        }
+        break;
+        default: {
+            char cmd[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
+            sprintf(&cmd[4], "%04X%04X", 0x2100, bank_addr);
+            write_command_word(cmd);
+        }
+        break;
     }
 }
 
@@ -88,16 +117,7 @@ size_t read_memory(uint16_t _addr, uint16_t _len, std::vector<uint8_t> *buffer, 
     char cmd[12] = {'R', 'E', 'A', 'D', '0', '0', '0', '0', '0', '0', '0', '0'};
     sprintf(&cmd[4], "%04X%04X", _addr, _len);
 
-    for(unsigned int i=0; i<12; i++) {
-        boost::asio::write(port, boost::asio::buffer(&cmd[i], 1));
-        boost::asio::read(port, boost::asio::buffer(&c,1));
-        if(cmd[i] != c[0]) {
-            std::cerr << "An error occurred during data transfer, aborting!" << std::endl;
-            std::cerr << "Error encountered at " << __FILE__ << " (" << __LINE__ << ")" << std::endl;
-            std::cerr << "Send: " << cmd[i] << " | Receive: " << c[0] << "| i=" << i << std::endl;
-            exit(-1);
-        }
-    }
+    write_command_word(cmd);
 
     // read addr line
     boost::asio::read(port, boost::asio::buffer(&c,8));
@@ -264,73 +284,91 @@ int get_number_rom_banks(uint8_t rom_flag) {
 }
 
 int main(int argc, char** argv) {
-    if(argc != 3) {
-        std::cerr << "Usage: " << argv[0] << "<PORT> <DUMP.gb>" << std::endl;
-        return -1;
-    }
+    try {
 
-    std::string _port(argv[1]);
-    std::string _file(argv[2]);
+        TCLAP::CmdLine cmd("Perform pattern recognition on particle.", ' ', "0.1");
 
-    // open serial port and set BAUD rate
-    port.open(_port.c_str());
-    port.set_option(boost::asio::serial_port_base::baud_rate(57600));
+        // output file
+        TCLAP::ValueArg<std::string> arg_output_filename("o","output","Output file (i.e. rom.gb)",true,"__NONE__","filename");
+        cmd.add(arg_output_filename);
 
-    std::cout << "=========================================" << std::endl;
-    std::cout << "GameBoyCartridgeReader v.0.2 by Ivo Filot" << std::endl;
-    std::cout << "=========================================" << std::endl;
+        // port
+        TCLAP::ValueArg<std::string> arg_port("p","port","Port (i.e. /dev/ttyUSB1)",true,"__NONE__","port");
+        cmd.add(arg_port);
 
-    // test simple read instruction
-    std::cout << "Test cartridge connectivity..." << std::flush;
-    std::vector<uint8_t> header;
-    read_memory(0x0000, 0x0000, &header);
-    std::cout << "DONE" << std::endl;
+        cmd.parse(argc, argv);
 
-    // read the ROM header and extract valuable information
-    std::cout << "Test reading cartridge header info..." << std::flush;
-    read_memory(0x0000, 0x014F, &header);
-    std::cout << "DONE" << std::endl;
-    std::cout << "=========================================" << std::endl;
-    print_header_details(header);
+        const std::string port_url = arg_port.getValue();
+        const std::string filename = arg_output_filename.getValue();
 
-    std::cout << "=========================================" << std::endl;
+        // open serial port and set BAUD rate
+        port.open(port_url.c_str());
+        port.set_option(boost::asio::serial_port_base::baud_rate(57600));
 
-    std::vector<uint8_t> data; // hold complete data
+        std::cout << "=========================================" << std::endl;
+        std::cout << "GameBoyCartridgeReader v.0.2 by Ivo Filot" << std::endl;
+        std::cout << "=========================================" << std::endl;
 
-    if(header[0x0148] == 0x00) {
-        // read the complete ROM
-        size_t bytes = read_memory(0x0000, 0x8000, &data, true);
-        std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
-    } else {
-        size_t bytes = 0;
-        for(uint8_t i=1; i<get_number_rom_banks(header[0x148]); i++) {
-            change_rom_bank(i, true); // false suppress output
-            if(i == 1) {
-                // read the first 16kb + the first rom bank (total 32kb)
-                std::cout << "Reading ROM BANKS 0+1... please wait" << std::endl;
-                bytes += read_memory(0x0000, 0x8000, &data, true);
-            } else {
-                std::cout << "Reading ROM BANK " << (int)i << "... please wait" << std::endl;
-                bytes += read_memory(0x4000, 0x4000, &data, true);
+        // test simple read instruction
+        std::cout << "Test cartridge connectivity..." << std::flush;
+        std::vector<uint8_t> header;
+        read_memory(0x0000, 0x0000, &header);
+        std::cout << "DONE" << std::endl;
+
+        // read the ROM header and extract valuable information
+        std::cout << "Test reading cartridge header info..." << std::flush;
+        read_memory(0x0000, 0x014F, &header);
+        std::cout << "DONE" << std::endl;
+        std::cout << "=========================================" << std::endl;
+        print_header_details(header);
+
+        std::cout << "=========================================" << std::endl;
+
+        std::vector<uint8_t> data; // hold complete data
+
+        if(header[0x0148] == 0x00) {
+            // read the complete ROM
+            size_t bytes = read_memory(0x0000, 0x8000, &data, true);
+            std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
+        } else {
+            size_t bytes = 0;
+            for(uint8_t i=1; i<get_number_rom_banks(header[0x148]); i++) {
+                change_rom_bank(header[0x0147], i, true); // false suppress output
+                if(i == 2) {
+                    break;
+                }
+                if(i == 1) {
+                    // read the first 16kb + the first rom bank (total 32kb)
+                    std::cout << "Reading ROM BANKS 0+1... please wait" << std::endl;
+                    bytes += read_memory(0x0000, 0x8000, &data, true);
+                } else {
+                    std::cout << "Reading ROM BANK " << (int)i << "... please wait" << std::endl;
+                    bytes += read_memory(0x4000, 0x4000, &data, true);
+                }
+                std::cout << std::endl;
             }
-            std::cout << std::endl;
+
+            std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
         }
 
-        std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
+        // close and clean-up
+        port.close();
+
+        // store ROM data into file
+        std::ofstream out(filename.c_str());
+        for(auto v: data) {
+            out << v;
+        }
+
+        // end of program
+        std::cout << "=========================================" << std::endl;
+        std::cout << "End of program" << std::endl;
+
+        return 0;
+
+    } catch (TCLAP::ArgException &e) {
+        std::cerr << "error: " << e.error() <<
+                     " for arg " << e.argId() << std::endl;
+        return -1;
     }
-
-    // close and clean-up
-    port.close();
-
-    // store ROM data into file
-    std::ofstream out(_file.c_str());
-    for(auto v: data) {
-        out << v;
-    }
-
-    // end of program
-    std::cout << "=========================================" << std::endl;
-    std::cout << "End of program" << std::endl;
-
-    return 0;
 }
