@@ -30,7 +30,7 @@
 int main(int argc, char** argv) {
     try {
 
-        TCLAP::CmdLine cmd("Perform pattern recognition on particle.", ' ', "0.1");
+        TCLAP::CmdLine cmd("Read or write to gameboy cartridge.", ' ', "0.3");
 
         // output file
         TCLAP::ValueArg<std::string> arg_output_filename("o","output","Output file (i.e. rom.gb)",true,"__NONE__","filename");

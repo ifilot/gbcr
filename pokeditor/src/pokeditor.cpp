@@ -23,6 +23,7 @@
 #include <menu.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tclap/CmdLine.h>
 
 #define WHITEONBLUE 1
 #define BLACKONWHITE 2
@@ -54,16 +55,6 @@ bool set_colors(int colorscheme) {
         return(true);
     } else {
         return(false);
-    }
-}
-
-void clrscr(void) {
-    int y, x, maxy, maxx;
-    getmaxyx(stdscr, maxy, maxx);
-    for(y=0; y < maxy; y++) {
-        for(x=0; x < maxx; x++) {
-            mvaddch(y, x, ' ');
-        }
     }
 }
 
@@ -133,7 +124,7 @@ int run_menu(WINDOW* wparent, int height, int width, int y, int x, char* choices
 
     // match colors
     set_menu_fore(my_menu, COLOR_PAIR(REDONWHITE));
-    set_menu_back(my_menu, COLOR_PAIR(WHITEONBLUE) | WA_BOLD);
+    set_menu_back(my_menu, COLOR_PAIR(WHITEONRED) | WA_BOLD);
 
     // set up environment conducive to menuing
     keypad(wui, true);
@@ -149,6 +140,8 @@ int run_menu(WINDOW* wparent, int height, int width, int y, int x, char* choices
 
     // handle user keystrokes
     while(my_choice == -1) {
+        touchwin(wui);
+        wrefresh(wui);
         c = getch();
         switch(c) {
             case KEY_DOWN:
@@ -159,7 +152,6 @@ int run_menu(WINDOW* wparent, int height, int width, int y, int x, char* choices
             break;
             case 10: // enter
                 my_choice = item_index(current_item(my_menu));
-                refresh();
                 pos_menu_cursor(my_menu);
             break;
         }
@@ -194,8 +186,8 @@ int run_menu(WINDOW* wparent, int height, int width, int y, int x, char* choices
 
 void draw_window(WINDOW* win, const std::string& title) {
     box(stdscr, ACS_VLINE, ACS_HLINE);
-    int x, maxy, maxx;
 
+    int x, maxy, maxx;
     getmaxyx(win, maxy, maxx);
 
     x = (maxx - 4 - title.size()) / 2;
@@ -204,10 +196,25 @@ void draw_window(WINDOW* win, const std::string& title) {
     waddstr(win, title.c_str());
     waddch(win, ' ');
     waddch(win, ACS_LTEE);
+
+    touchwin(stdscr);
+    wrefresh(stdscr);
 }
 
 int main(int argc, char *argv[]) {
-    char *choices[] = {
+    try {
+
+        TCLAP::CmdLine cmd("Edit a pokemon save file.", ' ', "0.1");
+
+        // output file
+        TCLAP::ValueArg<std::string> arg_input_filename("i","input","Input file (i.e. rom.sav)",true,"__NONE__","filename");
+        cmd.add(arg_input_filename);
+
+        cmd.parse(argc, argv);
+
+        const std::string input_filename = arg_input_filename.getValue();
+
+        char *choices[] = {
                     "One",
                     "Two",
                     "Three",
@@ -216,23 +223,33 @@ int main(int argc, char *argv[]) {
                     NULL
                       };
 
-    int choiceno;
+        int choiceno;
 
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, true);
-    initialize_colors();
+        initscr();
+        cbreak();
+        noecho();
+        keypad(stdscr, true);
+        initialize_colors();
 
-    // set up standard screen
-    wattrset(stdscr, COLOR_PAIR(WHITEONBLUE) | WA_BOLD);
-    wclrscr(stdscr);
-    draw_window(stdscr, "Pokemon Editor");
+        // set up standard screen
+        wattrset(stdscr, COLOR_PAIR(WHITEONBLUE) | WA_BOLD);
+        wclrscr(stdscr);
+        draw_window(stdscr, "Pokemon Editor");
+        mvwaddstr(stdscr, 1, 1, "Player: ");
 
-    choiceno = run_menu(stdscr, 16, 40, 2, 20, choices);
+        const int border = 10;
+        int x, maxy, maxx;
+        getmaxyx(stdscr, maxy, maxx);
+        choiceno = run_menu(stdscr, maxy - border, maxx - border, border / 2, border / 2, choices);
 
-    endwin();
+        endwin();
 
-    return(0);
+        return(0);
+
+    } catch (TCLAP::ArgException &e) {
+        std::cerr << "error: " << e.error() <<
+                     " for arg " << e.argId() << std::endl;
+        return -1;
+    }
 }
 
