@@ -24,6 +24,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <tclap/CmdLine.h>
+#include <boost/format.hpp>
+
+#include "savegame.h"
 
 #define WHITEONBLUE 1
 #define BLACKONWHITE 2
@@ -68,8 +71,6 @@ void wclrscr(WINDOW * pwin) {
     }
 }
 
-
-
 void window_center_title(WINDOW *pwin, const char * title) {
     int x, maxy, maxx, stringsize;
     getmaxyx(pwin, maxy, maxx);
@@ -82,7 +83,7 @@ void window_center_title(WINDOW *pwin, const char * title) {
     waddch(pwin, ACS_LTEE);
 }
 
-int run_menu(WINDOW* wparent, int height, int width, int y, int x, char* choices[]) {
+int run_menu(WINDOW* wparent, int height, int width, int y, int x, const std::vector<std::string>& choices) {
     int c;              // the key pressed
 
     ITEM** my_items;    // list of items on this menu
@@ -91,17 +92,14 @@ int run_menu(WINDOW* wparent, int height, int width, int y, int x, char* choices
     WINDOW *wui;
     WINDOW *wborder;
 
-    int n_choices;      // number of items on the menu
-    int ss_choice;      // subscript to run around the choices array
-    int my_choice = -1; // the zero based numeric user choice
-
-    // calculate number of menu choices
-    for(n_choices = 0; choices[n_choices]; n_choices++);
+    int n_choices = choices.size();      // number of items on the menu
+    int ss_choice;                       // subscript to run around the choices array
+    int my_choice = -1;                  // the zero based numeric user choice
 
     // allocate item array and individual items
     my_items = (ITEM**)calloc(n_choices + 1, sizeof(ITEM*));
     for(ss_choice = 0; ss_choice < n_choices; ++ss_choice) {
-        my_items[ss_choice] = new_item(choices[ss_choice], NULL);
+        my_items[ss_choice] = new_item(choices[ss_choice].c_str(), NULL);
     }
     my_items[n_choices] = (ITEM*)NULL;
 
@@ -149,6 +147,12 @@ int run_menu(WINDOW* wparent, int height, int width, int y, int x, char* choices
             break;
             case KEY_UP:
                 menu_driver(my_menu, REQ_UP_ITEM);
+            break;
+            case KEY_NPAGE:
+                menu_driver(my_menu, REQ_SCR_DPAGE);
+            break;
+            case KEY_PPAGE:
+                menu_driver(my_menu, REQ_SCR_UPAGE);
             break;
             case 10: // enter
                 my_choice = item_index(current_item(my_menu));
@@ -201,6 +205,62 @@ void draw_window(WINDOW* win, const std::string& title) {
     wrefresh(stdscr);
 }
 
+void draw_pokemon_list(WINDOW* wparent, const SaveGame& sg) {
+    int maxy, maxx, mypadpos = 0;
+    getmaxyx(wparent, maxy, maxx);
+
+    WINDOW* wborder = newwin(maxy - 10, maxx - 10, 5, 5);
+    wattrset(wborder, COLOR_PAIR(WHITEONRED) | WA_BOLD);
+    wclrscr(wborder);
+    box(wborder, 0, 0);
+    window_center_title(wborder, "Pokemon seen");
+
+    // refresh border
+    touchwin(wborder);
+    wrefresh(wborder);
+
+    WINDOW* pad = newpad(151, maxx - 12);
+    wattrset(pad, COLOR_PAIR(WHITEONRED) | WA_BOLD);
+
+    auto pokemon_seen = sg.get_pokemon_seen();
+    for(unsigned int i=0; i<151; i++) {
+        std::string line = (boost::format("%03i %s - %s")
+                            % (i+1)
+                            % get_pokemon_name(i)
+                            % (pokemon_seen.test(i) ? "SEEN" : "")
+                           ).str();
+        line.resize((maxx - 13), ' ');
+        line.append("\n");
+        wprintw(pad, line.c_str());
+    }
+
+    int c = 0;
+    int maxpadpos = 151 - (maxy - 12);
+    while(c != 10 ) {
+        switch(c) {
+            case KEY_UP:
+                mypadpos--;
+            break;
+            case KEY_DOWN:
+                mypadpos++;
+            break;
+            case KEY_PPAGE:
+                mypadpos-= maxy - 7;
+            break;
+            case KEY_NPAGE:
+                mypadpos+= maxy - 7;
+            break;
+        }
+
+        mypadpos = std::min(mypadpos, maxpadpos);
+        mypadpos = std::max(mypadpos, 0);
+        prefresh(pad, mypadpos, 0, 6, 6, maxy - 7, maxx - 2);
+        touchwin(pad);
+
+        c = getch();
+    }
+}
+
 int main(int argc, char *argv[]) {
     try {
 
@@ -214,16 +274,14 @@ int main(int argc, char *argv[]) {
 
         const std::string input_filename = arg_input_filename.getValue();
 
-        char *choices[] = {
-                    "One",
-                    "Two",
-                    "Three",
-                    "Four",
-                    "Cancel",
-                    NULL
-                      };
+        SaveGame sg(input_filename);
 
-        int choiceno;
+        std::vector<std::string> choices = {
+            "Show pokemon seen",
+            "Exit"
+        };
+
+        int choiceno = 0;
 
         initscr();
         cbreak();
@@ -235,16 +293,26 @@ int main(int argc, char *argv[]) {
         wattrset(stdscr, COLOR_PAIR(WHITEONBLUE) | WA_BOLD);
         wclrscr(stdscr);
         draw_window(stdscr, "Pokemon Editor");
-        mvwaddstr(stdscr, 1, 1, "Player: ");
+        mvwaddstr(stdscr, 1, 1, (std::string("Player: ") + sg.get_player_name()).c_str());
+        mvwaddstr(stdscr, 2, 1, (boost::format("Pokemon seen: %i") % sg.get_pokemon_seen().count()).str().c_str());
 
         const int border = 10;
         int x, maxy, maxx;
         getmaxyx(stdscr, maxy, maxx);
-        choiceno = run_menu(stdscr, maxy - border, maxx - border, border / 2, border / 2, choices);
+
+        while(choiceno != choices.size() - 1) {
+            choiceno = run_menu(stdscr, maxy - border, maxx - border, border / 2, border / 2, choices);
+
+            switch(choiceno) {
+                case 0:
+                    draw_pokemon_list(stdscr, sg);
+                break;
+            }
+        }
 
         endwin();
 
-        return(0);
+        return 0;
 
     } catch (TCLAP::ArgException &e) {
         std::cerr << "error: " << e.error() <<
