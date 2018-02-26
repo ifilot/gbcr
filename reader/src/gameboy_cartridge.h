@@ -29,6 +29,7 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <chrono>
 
 class GameboyCartridge {
 private:
@@ -149,10 +150,28 @@ private:
      */
     void print_loadbar(unsigned int x, unsigned int n, unsigned int w = 35);
 
+    /**
+     * @brief      Writes a byte.
+     *
+     * @param[in]  addr  address to write byte to
+     * @param[in]  val   byte value
+     */
     void write_byte(uint16_t addr, uint8_t val);
 
+    /**
+     * @brief      Writes to file.
+     *
+     * @param[in]  data     The data
+     * @param[in]  outfile  The outfile
+     */
     void write_to_file(const std::vector<uint8_t>& data, const std::string& outfile);
 
+    /**
+     * @brief      Loads from file.
+     *
+     * @param      data   The data
+     * @param[in]  input  The input
+     */
     void load_from_file(std::vector<uint8_t>& data, const std::string& input);
 };
 

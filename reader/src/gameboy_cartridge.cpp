@@ -118,6 +118,7 @@ void GameboyCartridge::load_ram(const std::string& input_file) {
 void GameboyCartridge::read_ram(const std::string& output_file) {
     size_t bytes = 0;
     this->ram_data.clear();
+    auto start = std::chrono::system_clock::now();
 
     if(this->cartridge_type == 0x13) {
         this->set_ram(true);
@@ -131,9 +132,14 @@ void GameboyCartridge::read_ram(const std::string& output_file) {
         this->set_ram(false);
     }
 
+    // calculate time
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+
+    // write ram to file
     this->write_to_file(this->ram_data, output_file);
 
-    std::cout << bytes << " bytes written." << std::endl;
+    std::cout << "Done reading " << bytes << " bytes from RAM in " << elapsed_seconds.count() << " seconds." << std::endl;
 }
 
 /**
@@ -143,6 +149,7 @@ void GameboyCartridge::read_ram(const std::string& output_file) {
  */
 void GameboyCartridge::read_rom(const std::string& output_file) {
     size_t bytes = 0;
+    auto start = std::chrono::system_clock::now();
 
     if(this->cartridge_type == 0x00) {
         // read the complete ROM
@@ -162,9 +169,14 @@ void GameboyCartridge::read_rom(const std::string& output_file) {
         }
     }
 
+    // calculate time
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+
+    // write rom to file
     this->write_to_file(this->rom_data, output_file);
 
-    std::cout << "Done reading " << bytes << " bytes from ROM.        " << std::endl;
+    std::cout << "Done reading " << bytes << " bytes from ROM in " << elapsed_seconds.count() << " seconds." << std::endl;
 }
 
 /**
@@ -461,6 +473,12 @@ void GameboyCartridge::print_loadbar(unsigned int x, unsigned int n, unsigned in
     std::cout << "]\r" << std::flush;
 }
 
+/**
+ * @brief      Writes a byte.
+ *
+ * @param[in]  addr  address to write byte to
+ * @param[in]  val   byte value
+ */
 void GameboyCartridge::write_byte(uint16_t addr, uint8_t val) {
     char cmd[13] = {'W', 'R', 'B', 'Y', '0', '0', '0', '0', 'X', 'X', 'X', 'X','0'};
 
@@ -468,6 +486,12 @@ void GameboyCartridge::write_byte(uint16_t addr, uint8_t val) {
     this->write_command_word(cmd);
 }
 
+/**
+ * @brief      Writes to file.
+ *
+ * @param[in]  data     The data
+ * @param[in]  outfile  The outfile
+ */
 void GameboyCartridge::write_to_file(const std::vector<uint8_t>& data, const std::string& outfile) {
     // store ROM data into file
     std::ofstream out(outfile.c_str());
@@ -477,6 +501,12 @@ void GameboyCartridge::write_to_file(const std::vector<uint8_t>& data, const std
     out.close();
 }
 
+/**
+ * @brief      Loads from file.
+ *
+ * @param      data   The data
+ * @param[in]  input  The input
+ */
 void GameboyCartridge::load_from_file(std::vector<uint8_t>& data, const std::string& input) {
     std::ifstream in(input.c_str());
     char chr;
