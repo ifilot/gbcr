@@ -120,7 +120,7 @@ void GameboyCartridge::read_ram(const std::string& output_file) {
     this->ram_data.clear();
     auto start = std::chrono::system_clock::now();
 
-    if(this->cartridge_type == 0x13) {
+    if(this->cartridge_type == 0x13 || this->cartridge_type == 0x1B) {
         this->set_ram(true);
 
         for(unsigned int i=0; i<4; i++) {
@@ -370,6 +370,9 @@ void GameboyCartridge::print_header_details() {
         break;
         case 0x1A:
             std::cout << "MBC5+RAM";
+        break;
+        case 0x1B:
+            std::cout << "MBC5+RAM+BATTERY";
         break;
         default:
             std::cout << "Unknown type: " << (int)header[0x147];
